@@ -2,7 +2,7 @@
 """Test forms."""
 
 from terrain_chatbot.public.forms import LoginForm
-from terrain_chatbot.user.forms import RegisterForm
+from app.user.forms import RegisterForm
 
 
 class TestRegisterForm:

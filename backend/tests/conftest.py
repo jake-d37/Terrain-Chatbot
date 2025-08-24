@@ -6,7 +6,7 @@ import logging
 import pytest
 from webtest import TestApp
 
-from terrain_chatbot.app import create_app
+from app.app import create_app
 from terrain_chatbot.database import db as _db
 
 from .factories import UserFactory

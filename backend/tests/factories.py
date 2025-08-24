@@ -4,7 +4,7 @@ from factory import Sequence
 from factory.alchemy import SQLAlchemyModelFactory
 
 from terrain_chatbot.database import db
-from terrain_chatbot.user.models import User
+from app.user.models import User
 
 
 class BaseFactory(SQLAlchemyModelFactory):

@@ -5,7 +5,7 @@ See: http://webtest.readthedocs.org/
 """
 from flask import url_for
 
-from terrain_chatbot.user.models import User
+from app.user.models import User
 
 from .factories import UserFactory
 

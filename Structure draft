@@ -1,0 +1,38 @@
+backend/
+  app/                         # ← 把 terrain_chatbot 重命名为 app（可选但更清晰）
+    __init__.py                # app factory（create_app）
+    config.py                  # 统一环境配置
+    extensions.py              # cors、logging、(可选) firebase client
+    middlewares/
+      __init__.py
+      request_context.py       # request_id 等（可选）
+    utils/
+      errors.py                # 统一错误响应
+    blueprints/
+      chat/
+        __init__.py
+        routes.py              # POST /api/chat
+        schemas.py             # Pydantic 请求/响应模型
+      health/
+        __init__.py
+        routes.py              # GET /health
+    services/
+      gemini.py                # 与 Gemini 的交互 + function calling 循环
+      tools/
+        __init__.py
+        registry.py            # 工具注册表
+        book_inventory.py      # 示例：查书是否可借
+      data_providers/
+        __init__.py
+        base.py                # Provider 协议
+        firebase_provider.py   # 直连 Firebase 版本
+        http_provider.py       # 甲方 HTTP API 版本
+  tests/
+    __init__.py
+    conftest.py
+    test_chat_flow.py          # 覆盖 /api/chat 闭环（mock provider）
+    test_inventory_tool.py     # 覆盖 tools
+  wsgi.py
+  requirements.txt
+  .env.example
+  README.md
