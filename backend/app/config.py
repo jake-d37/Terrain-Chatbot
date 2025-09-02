@@ -1,5 +1,6 @@
 # config.py
 import os
+from dotenv import load_dotenv
 
 
 class Config:
@@ -20,3 +21,9 @@ class Config:
         "INVENTORY_BASE_URL"
     )  # https://partner.example.com/api
     INVENTORY_API_KEY = os.getenv("INVENTORY_API_KEY")
+
+
+def load_config(app):
+    load_dotenv()
+    app.config["GENAI_MODEL"] = os.environ.get("GENAI_MODEL", "gemini-1.5-pro")
+    app.config["GEMINI_API_KEY"] = os.environ.get("GEMINI_API_KEY")

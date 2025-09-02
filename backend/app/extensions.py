@@ -4,6 +4,25 @@ import structlog
 import os
 import firebase_admin
 from firebase_admin import credentials, firestore
+from flask import Flask
+from flask_cors import CORS
+
+
+# backend/app/extensions.py
+try:
+    from flask_cors import CORS
+except ImportError:
+    CORS = None  # 允许在未安装时跳过
+
+
+def init_extensions(app):
+    if CORS:
+        CORS(app, resources={r"/*": {"origins": "*"}})
+
+
+def init_extensions(app: Flask):
+    CORS(app, resources={r"/*": {"origins": "*"}})
+
 
 cors = CORS()
 
