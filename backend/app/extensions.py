@@ -2,17 +2,17 @@
 from flask_cors import CORS
 import structlog
 import os
-import firebase_admin
-from firebase_admin import credentials, firestore
+
+# import firebase_admin
+# from firebase_admin import credentials, firestore
 from flask import Flask
 from flask_cors import CORS
-
 
 # backend/app/extensions.py
 try:
     from flask_cors import CORS
 except ImportError:
-    CORS = None  # 允许在未安装时跳过
+    CORS = None
 
 
 def init_extensions(app):
@@ -20,15 +20,14 @@ def init_extensions(app):
         CORS(app, resources={r"/*": {"origins": "*"}})
 
 
-def init_extensions(app: Flask):
-    CORS(app, resources={r"/*": {"origins": "*"}})
-
-
-cors = CORS()
-
-
 def configure_logging(app):
-    structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(20))
+    # 简单日志配置
+    import logging, sys
+
+    handler = logging.StreamHandler(sys.stdout)
+    if not app.logger.handlers:
+        app.logger.addHandler(handler)
+    app.logger.setLevel(logging.INFO)
     app.logger.info("logging configured")
 
 

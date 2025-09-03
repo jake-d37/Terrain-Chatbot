@@ -1,8 +1,8 @@
 # Tool Registry
 from typing import Callable, Dict, Any, List
 from dataclasses import dataclass
-from utils.errors import ToolError
-from services.tools.book_inventory import search_books
+from app.utils.errors import ToolError
+from app.services.tools.book_inventory import search_books
 
 
 @dataclass

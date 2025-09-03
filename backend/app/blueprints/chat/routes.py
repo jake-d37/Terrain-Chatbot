@@ -1,8 +1,9 @@
 # POST /api/chat
 from flask import Blueprint, request, jsonify, current_app
 from app.blueprints.chat.schemas import ChatRequest, ChatResponse
-from services.tools.registry import build_default_registry
-from services.tools.gemini import LLMClient
+from app.services.tools.registry import build_default_registry
+from app.services.tools.gemini import LLMClient
+
 
 chat_bp = Blueprint("chat", __name__)
 
