@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify, current_app
 from app.blueprints.chat.schemas import ChatRequest, ChatResponse
 from app.services.tools.registry import build_default_registry
 from app.services.tools.gemini import LLMClient
+import logging
 
 
 chat_bp = Blueprint("chat", __name__)
@@ -36,9 +37,11 @@ def chat():
     ]
 
     llm = LLMClient(
-        model_name=current_app.config.get("GENAI_MODEL", "gemini-1.5-pro"),
+        model_name=current_app.config.get("GENAI_MODEL", "gemini-1.5-flash"),
         api_key=current_app.config.get("GEMINI_API_KEY"),
     )
+    # Log the mode check
+    logging.info("[LLM] Mode check: using_fake=%s", getattr(llm, "_use_fake", True))
     final_text, used_tools = llm.chat_with_tools(messages, tool_decls, registry.run)
     resp = ChatResponse(
         text=final_text, used_tools=used_tools, session_id=req.session_id

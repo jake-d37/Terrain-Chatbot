@@ -147,7 +147,7 @@ curl -s http://localhost:8000/health/
 
 Optional: quick chat smoke test (fake LLM fallback will work without an API key):
 ```bash
-curl -s -X POST http://localhost:8000/v1/chat   -H "Content-Type: application/json"   -d '{"user_id":"miles","message":"帮我找 AI 相关的书"}'
+curl -s -X POST http://localhost:8000/v1/chat   -H "Content-Type: application/json"   -d '{"user_id":"miles","message":"Look for a book for me"}'
 ```
 
 ---
