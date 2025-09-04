@@ -209,7 +209,7 @@ flask --app backend/app.app:create_app run -p 8000
 # basic call
 curl -s -X POST http://localhost:8000/v1/chat \
   -H "Content-Type: application/json" \
-  -d '{"message":"帮我找 AI 相关的书"}' | jq
+  -d '{"message":"Help me to find a book about AI"}' | jq
 
 # tip: to see raw UTF-8 text from JSON, use jq -r
 curl -s ... | jq -r .text
@@ -357,11 +357,3 @@ curl -s -X POST http://localhost:8000/v1/chat \
   }' | jq
 # Check "used_tools": ["wrap_prompt_from_links"] if the tool was triggered.
 ```
-
----
-
-## 10) Known issues / TODO
-
-* **UTF-8 JSON output:** set `app.config["JSON_AS_ASCII"]=False`, but verify client-side display (use `jq -r .text`). If still escaped, consider returning `Response(json.dumps(payload, ensure_ascii=False), ...)` for critical endpoints.
-* **History size control:** optionally cap to N turns or estimate tokens to prevent oversized prompts.
-* **Domain allow-list:** if fetching prompts from the public internet, enforce allowed hostnames/timeouts.
