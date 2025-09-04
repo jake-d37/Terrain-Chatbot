@@ -11,6 +11,7 @@ from app.config import load_config
 
 def create_app(config_object: type[Config] | None = None) -> Flask:
     app = Flask(__name__)
+    app.config["JSON_AS_ASCII"] = False
     load_config(app)
     init_extensions(app)
     app.config.from_object(config_object or Config())

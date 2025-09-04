@@ -5,8 +5,9 @@ from typing import Optional, Dict, Any, List
 
 @dataclass
 class ChatRequest:
-    user_id: str
     message: str
+    user_id: Optional[str] = None  # <-- optional now
+    history: Optional[List[Dict[str, str]]] = None
     session_id: Optional[str] = None
     stream: bool = False
     meta: Optional[Dict[str, Any]] = None
