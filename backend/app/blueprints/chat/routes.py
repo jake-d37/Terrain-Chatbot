@@ -4,6 +4,7 @@ from app.blueprints.chat.schemas import ChatRequest, ChatResponse
 from app.services.tools.registry import build_default_registry
 from app.services.tools.gemini import LLMClient
 import logging
+from app.utils.prompt_wrap import wrap_prompt, PromptWrapError
 
 chat_bp = Blueprint("chat", __name__)
 
@@ -59,4 +60,22 @@ def chat():
     except Exception as e:
         # log full traceback so we can see the real cause
         current_app.logger.exception("chat endpoint failed: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@chat_bp.route("/wrap", methods=["POST"])
+def wrap_only():
+    body = request.get_json(force=True) or {}
+    outer = body.get("outer_link")
+    inner = body.get("inner_link")
+    placeholder = body.get("placeholder", "{{CONTENT}}")
+    if not outer or not inner:
+        return jsonify({"error": "outer_link and inner_link are required"}), 400
+    try:
+        wrapped = wrap_prompt(outer, inner, placeholder=placeholder)
+        return jsonify({"wrapped": wrapped})
+    except PromptWrapError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        current_app.logger.exception("wrap failed: %s", e)
         return jsonify({"error": "internal error"}), 500

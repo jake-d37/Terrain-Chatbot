@@ -166,6 +166,202 @@ curl -s -X POST http://localhost:8000/v1/chat \
 
 ---
 
-*Status:* ✅ Server check returns **200 OK**.
+## 7) Feature: Real Gemini API calling (and JSON encoding)
 
-✅ API calling successful returns **200 OK**.
+**What we changed**
+
+* Switched `LLMClient` to call **real Gemini** when `GEMINI_API_KEY` is present.
+
+  * Decision pass: model returns a strict JSON like `{"tool":"...", "args":{...}}`.
+  * If a tool is requested → run it via the registry → second call asks Gemini to **summarize** the tool result.
+  * If no tool needed → direct answer.
+* Clear logging of mode: `using_fake=True|False`.
+* Tried to set UTF-8 JSON output (no `\uXXXX`) via `app.config["JSON_AS_ASCII"] = False` in `create_app()`; still needs verification in the client/CLI.
+
+**Key snippets**
+
+```python
+# app/services/tools/gemini.py (simplified)
+genai.configure(api_key=self.api_key)
+self._model = genai.GenerativeModel(self.model_name)
+# self._use_fake = not bool(self.api_key)  # logs FAKE when no key
+
+# app/app.py
+def create_app():
+    app = Flask(__name__)
+    app.config["JSON_AS_ASCII"] = False  # return actual UTF-8 in jsonify
+    ...
+```
+
+**How to test**
+
+```bash
+# .env
+GEMINI_API_KEY=YOUR_REAL_KEY
+GENAI_MODEL=gemini-1.5-pro
+
+# start
+flask --app backend/app.app:create_app run -p 8000
+
+# observe logs
+# INFO [LLM] Mode check: using_fake=False
+
+# basic call
+curl -s -X POST http://localhost:8000/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"帮我找 AI 相关的书"}' | jq
+
+# tip: to see raw UTF-8 text from JSON, use jq -r
+curl -s ... | jq -r .text
+```
+
+**Note (encoding)**
+
+* If you still see `\uXXXX`, confirm `JSON_AS_ASCII=False` ran, or print with `jq -r`.
+* As a fallback you can return a `Response(json.dumps(obj, ensure_ascii=False), mimetype="application/json")` for the payloads where you require strict UTF-8.
+
+---
+
+## 8) Feature: Ephemeral chat history (stateless server)
+
+**What we changed**
+
+* **`ChatRequest`** now: `message: str`, `user_id: Optional[str]`, `history: Optional[List[Dict[str,str]]]`, etc.
+* `/v1/chat` accepts an optional `history` array and **rehydrates the last 20 turns** (`user`/`assistant`) before appending the new user message.
+* Defensive parsing + logging to avoid 500s on malformed bodies.
+* The server **does not persist** history; the **client** owns it (e.g., `sessionStorage`).
+
+**Server test (without frontend)**
+
+```bash
+# single-shot
+curl -s -X POST http://localhost:8000/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Hello"}' | jq
+
+# simulate context via client-provided history (two prior turns)
+curl -s -X POST http://localhost:8000/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Continue our discussion.",
+    "history": [
+      {"role":"user","content":"I like sci-fi books."},
+      {"role":"assistant","content":"Noted. Do you prefer hard or soft sci-fi?"}
+    ]
+  }' | jq
+```
+
+**Frontend pattern (per-tab memory)**
+
+```html
+<script>
+const KEY = 'chat_history_v1';
+function loadH(){ try{return JSON.parse(sessionStorage.getItem(KEY)||'[]')}catch{return[]}}
+function saveH(h){ sessionStorage.setItem(KEY, JSON.stringify(h.slice(-40))); }
+
+async function sendMessage(message){
+  const history = loadH();
+  const res = await fetch('/v1/chat', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ message, history })
+  });
+  const data = await res.json();
+  history.push({role:'user', content:message});
+  history.push({role:'assistant', content:data.text});
+  saveH(history);
+  return data;
+}
+</script>
+```
+
+---
+
+## 9) Feature: Prompt wrapping utility + `/v1/wrap` endpoint
+
+**What we built**
+
+* Utility `wrap_prompt(outer_link, inner_link, placeholder="{{CONTENT}}")` that:
+
+  1. fetches two `.txt` files (HTTP/HTTPS; optional `file://`),
+  2. inserts the inner prompt into the outer’s placeholder,
+  3. returns the composed prompt.
+* Errors for **invalid links**, **missing placeholder**, **oversized inner**.
+* New endpoint **`POST /v1/wrap`** for deterministic testing (no LLM involved).
+* Optional tool registration `wrap_prompt_from_links` so the LLM can compose prompts as a tool step.
+
+**Dependency**
+
+```
+# backend/requirements/dev.txt
+requests==2.32.3
+```
+
+**Endpoint (summary)**
+
+```http
+POST /v1/wrap
+{
+  "outer_link": "http://localhost:9000/outer.txt",
+  "inner_link": "http://localhost:9000/inner.txt",
+  "placeholder": "{{CONTENT}}"  // optional
+}
+→ { "wrapped": "final composed prompt..." }
+```
+
+**End-to-end test recipe**
+
+```bash
+# 1) prepare test files
+mkdir -p ~/prompts && cd ~/prompts
+cat > outer.txt <<'TXT'
+You are a careful assistant.
+Use the following task:
+
+{{CONTENT}}
+
+Return a concise result.
+TXT
+echo "Summarize https://example.com in 3 bullets." > inner.txt
+
+# 2) serve locally
+python3 -m http.server 9000
+
+# 3) call wrapper API
+curl -s -X POST http://localhost:8000/v1/wrap \
+  -H "Content-Type: application/json" \
+  -d '{
+    "outer_link":"http://localhost:9000/outer.txt",
+    "inner_link":"http://localhost:9000/inner.txt"
+  }' | jq -r .wrapped
+# EXPECTS:
+# You are a careful assistant.
+# Use the following task:
+#
+# Summarize https://example.com in 3 bullets.
+#
+# Return a concise result.
+
+# Failure examples (for validation)
+# - wrong URL: http://localhost:9000/missing.txt
+# - outer.txt without {{CONTENT}}
+```
+
+**(Optional) Tool route via chat**
+If you registered `wrap_prompt_from_links`, you can nudge LLM to call it:
+
+```bash
+curl -s -X POST http://localhost:8000/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message":"Compose a prompt by injecting inner into outer at {{CONTENT}} using these links:\nouter=http://localhost:9000/outer.txt\ninner=http://localhost:9000/inner.txt"
+  }' | jq
+# Check "used_tools": ["wrap_prompt_from_links"] if the tool was triggered.
+```
+
+---
+
+## 10) Known issues / TODO
+
+* **UTF-8 JSON output:** set `app.config["JSON_AS_ASCII"]=False`, but verify client-side display (use `jq -r .text`). If still escaped, consider returning `Response(json.dumps(payload, ensure_ascii=False), ...)` for critical endpoints.
+* **History size control:** optionally cap to N turns or estimate tokens to prevent oversized prompts.
+* **Domain allow-list:** if fetching prompts from the public internet, enforce allowed hostnames/timeouts.
