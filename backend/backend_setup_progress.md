@@ -145,6 +145,7 @@ curl -s http://localhost:8000/health/
 # => {"status": "ok"}
 ```
 
+
 Optional: quick chat smoke test (fake LLM fallback will work without an API key):
 ```bash
 curl -s -X POST http://localhost:8000/v1/chat \
@@ -357,3 +358,84 @@ curl -s -X POST http://localhost:8000/v1/chat \
   }' | jq
 # Check "used_tools": ["wrap_prompt_from_links"] if the tool was triggered.
 ```
+
+
+---
+
+## 10) Feature: Kill irrelevant communication (off-topic gating + prewritten)
+
+**What we added (2025-09-10)**
+
+- `app/utils/relevance.py`
+  - `check_relevance(text) -> RelevanceResult`: fast, local keyword heuristic for ecology/environment, books/library, and TERRAIN topics (EN + basic CN).
+  - `prewritten_response(text) -> Optional[str]`: canned replies for greetings and “What is TERRAIN?” to avoid LLM calls.
+  - `OFFTOPIC_MESSAGE`: standard deny message in English.
+  - Language helpers: `is_probably_english(text)`, `should_force_english(text)` to decide whether to enforce English replies.
+
+- `app/blueprints/chat/routes.py`
+  - Before creating the LLM client:
+    1) Run `prewritten_response` → if matched, return immediately (no LLM/tools).
+    2) Run `check_relevance` → if not relevant, return `OFFTOPIC_MESSAGE` (no LLM/tools) and log `off-topic denied: ...`.
+    3) Build system prompt. If `should_force_english(message)` is True, add: “Always respond in English …”.
+
+- `app/services/tools/gemini.py`
+  - Tool-result summarizer now explicitly says “in English”. Fallback errors are in English.
+
+- `app/app.py`
+  - Ensure UTF-8 JSON without `\uXXXX` escaping: set `app.config["JSON_AS_ASCII"] = False` and `app.json.ensure_ascii = False` (Flask 3).
+
+**Why**
+- Reduce token cost by short-circuiting irrelevant or trivial intents.
+- Provide fast, deterministic responses for greetings/basic intro.
+- Keep outputs consistent and readable for an English-first audience.
+
+**How to test**
+
+1) Start server
+```bash
+flask --app backend/app.app:create_app run -p 8000
+```
+
+2) Prewritten greeting (no LLM/tools)
+```bash
+curl -s -X POST http://localhost:8000/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"hello"}' | jq -r .text
+# EXPECT: English greeting text. used_tools should be []
+```
+
+3) Off-topic deny (no LLM/tools)
+```bash
+curl -s -X POST http://localhost:8000/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Tell me a football joke"}' | jq -r .text
+# EXPECT: English deny message about ecology/books scope. used_tools == []
+```
+
+4) Relevant request passes gating
+```bash
+curl -s -X POST http://localhost:8000/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Recommend beginner books on climate and design"}' | jq -r .text
+# EXPECT: Not denied. Response content depends on LLM mode:
+#  - With GEMINI_API_KEY: real model answer.
+#  - Without key (FAKE mode): a simple placeholder reply.
+```
+
+5) Verify UTF-8 JSON (no \uXXXX)
+```bash
+curl -s -X POST http://localhost:8000/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"你好"}' | python3 -c 'import sys,json;print(json.dumps(json.load(sys.stdin), ensure_ascii=False, indent=2))'
+```
+
+6) Logs
+```bash
+# Terminal running Flask should print an info log when off-topic is denied:
+# INFO off-topic denied: <reason>
+```
+
+**Notes / knobs**
+- Broaden/narrow relevance by editing keywords in `relevance.py` or changing `min_hits`.
+- Add more prewritten replies in `prewritten_response` for FAQs.
+- English-only behavior is injected via `should_force_english`; remove that line to follow user language.

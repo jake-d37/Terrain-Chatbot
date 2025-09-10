@@ -20,7 +20,7 @@ Available tools:
 """
 
 FOLLOWUP_SUMMARIZER = """
-Summarize the following TOOL_RESULT for the user in Chinese unless the user asked for English.
+Summarize the following TOOL_RESULT for the user in English.
 Be concise and helpful.
 
 TOOL_RESULT:
@@ -49,7 +49,7 @@ class LLMClient:
             return resp.candidates[0].content.parts[0].text
         except Exception as e:
             logging.exception("Gemini response parsing failed: %s", e)
-            return "抱歉，我暂时无法生成回复。"
+            return "Sorry, I’m unable to generate a reply right now."
 
     def chat_with_tools(
         self,
@@ -70,8 +70,8 @@ class LLMClient:
             if any(k in user_msg for k in ["找", "书", "AI", "book"]):
                 used.append("search_books")
                 result = tool_runner("search_books", {"query": "AI"})
-                return result.get("_nl", "完成。"), used
-            return "你好，我是 Terrain 助手。", used
+                return result.get("_nl", "Done."), used
+            return "Hello, I am the TERRAIN assistant.", used
 
         # 1) Ask model whether to call a tool
         tool_docs = []
