@@ -5,6 +5,12 @@ from app.services.tools.registry import build_default_registry
 from app.services.tools.gemini import LLMClient
 import logging
 from app.utils.prompt_wrap import wrap_prompt, PromptWrapError
+from app.utils.relevance import (
+    check_relevance,
+    prewritten_response,
+    OFFTOPIC_MESSAGE,
+    should_force_english,
+)
 
 chat_bp = Blueprint("chat", __name__)
 
@@ -30,12 +36,33 @@ def chat():
         if not req.message:
             return jsonify({"error": "message is required"}), 400
 
+        # 0) Prewritten fast path (greetings, basics)
+        canned = prewritten_response(req.message)
+        if canned:
+            resp = ChatResponse(text=canned, used_tools=[], session_id=req.session_id)
+            return jsonify(resp.__dict__)
+
+        # 0.5) Off-topic gating: avoid LLM/tool calls to save cost
+        rel = check_relevance(req.message)
+        if not rel.is_relevant:
+            current_app.logger.info("off-topic denied: %s", rel.reason)
+            resp = ChatResponse(text=OFFTOPIC_MESSAGE, used_tools=[], session_id=req.session_id)
+            return jsonify(resp.__dict__)
+
         registry = build_default_registry()
         tool_decls = registry.list_for_llm()
         tool_docs = registry.docs_for_prompt()
 
+        # Language policy: if user message is not in English, force English answer
+        force_en = should_force_english(req.message)
+        language_note = (
+            "Always respond in English, even if the user's message is not in English.\n"
+            if force_en
+            else "Respond in clear English.\n"
+        )
+
         system_prompt = (
-            "You are Terrain's assistant. Use tools when helpful.\n"
+            "You are Terrain's assistant. Use tools when helpful.\n" + language_note +
             "Available tools:\n" + tool_docs
         )
 

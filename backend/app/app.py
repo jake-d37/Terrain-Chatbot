@@ -11,7 +11,13 @@ from app.config import load_config
 
 def create_app(config_object: type[Config] | None = None) -> Flask:
     app = Flask(__name__)
-    app.config["JSON_AS_ASCII"] = False
+    # Ensure JSON responses are UTF-8 and do not escape non-ASCII characters
+    app.config["JSON_AS_ASCII"] = False  # legacy key for older Werkzeug/Flask
+    try:
+        # Flask 2.3+/3.x JSON provider
+        app.json.ensure_ascii = False
+    except Exception:
+        pass
     load_config(app)
     init_extensions(app)
     app.config.from_object(config_object or Config())
