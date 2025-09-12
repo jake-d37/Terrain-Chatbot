@@ -5,11 +5,17 @@ import os, json, logging
 import google.generativeai as genai
 
 
+# Developer/system-level guardrails used for the tool-decision pass. This plays the
+# role of the "inner" prompt: it is never shown to customers and encodes how the
+# assistant should think about tools.
 SYSTEM_TOOL_PROTOCOL = """
 You are Terrain's assistant. You can either answer directly, or if a tool is needed,
 you must output ONLY a single JSON object on one line with this structure:
 
-{"tool": "<tool_name>", "args": { ... }}
+{"tool": "<tool_name>", "args": { ... }, "success_message": "...", "empty_message": "...""}
+
+
+
 
 Rules:
 - Do not include any extra text or Markdown, only the JSON.
@@ -19,6 +25,9 @@ Available tools:
 {TOOL_DOCS}
 """
 
+# Template used after a tool executes to explain the result back to the user. This
+# effectively acts like the "outer" prompt, because it turns internal tool output
+# into customer-facing text.
 FOLLOWUP_SUMMARIZER = """
 Summarize the following TOOL_RESULT for the user in English.
 Be concise and helpful.
@@ -27,7 +36,6 @@ TOOL_RESULT:
 
 {tool_text}
 """
-
 
 class LLMClient:
     def __init__(self, model_name: str = "gemini-1.5-pro", api_key: str | None = None):

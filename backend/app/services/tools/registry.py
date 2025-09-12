@@ -3,7 +3,6 @@ from typing import Callable, Dict, Any, List
 from dataclasses import dataclass
 from app.utils.errors import ToolError
 from app.services.tools.book_inventory import search_books
-from app.utils.prompt_wrap import wrap_prompt, PromptWrapError
 
 
 @dataclass
@@ -59,8 +58,6 @@ class ToolsRegistry:
                 for it in items[:5]
             ]
             return "I found these books:\n- " + "\n- ".join(tops)
-        elif name == "wrap_prompt_from_links":
-            return "Prompt composed successfully. Ready to send to the API."
         return "Operation completed."
 
 
@@ -68,24 +65,16 @@ def build_default_registry() -> ToolsRegistry:
     reg = ToolsRegistry()
     reg.register(
         ToolSpec(
-            name="wrap_prompt_from_links",
-            description="Fetch two .txt files and inject the second into the first at {{CONTENT}}.",
+            name="search_books",
+            description="Search the library inventory for matching books by title or author.",
             parameters={
                 "type": "object",
                 "properties": {
-                    "outer_link": {"type": "string"},
-                    "inner_link": {"type": "string"},
-                    "placeholder": {"type": "string", "default": "{{CONTENT}}"},
+                    "query": {"type": "string", "description": "Keywords to match."},
                 },
-                "required": ["outer_link", "inner_link"],
+                "required": ["query"],
             },
-            handler=lambda args: {
-                "wrapped": wrap_prompt(
-                    args["outer_link"],
-                    args["inner_link"],
-                    args.get("placeholder", "{{CONTENT}}"),
-                )
-            },
+            handler=lambda args: {"items": search_books(args.get("query", ""))},
             allow_multiple=True,
         )
     )

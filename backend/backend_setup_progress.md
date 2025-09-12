@@ -277,87 +277,12 @@ async function sendMessage(message){
 
 ---
 
-## 9) Feature: Prompt wrapping utility + `/v1/wrap` endpoint
+## 9) (Removed) Prompt wrapping utility
 
-**What we built**
+This feature has been retired. The `/v1/wrap` endpoint, wrap-related tools, and
+environment toggles are no longer available. Prompts now live directly in
+`app/services/tools/gemini.py`, and configuration happens there.
 
-* Utility `wrap_prompt(outer_link, inner_link, placeholder="{{CONTENT}}")` that:
-
-  1. fetches two `.txt` files (HTTP/HTTPS; optional `file://`),
-  2. inserts the inner prompt into the outer’s placeholder,
-  3. returns the composed prompt.
-* Errors for **invalid links**, **missing placeholder**, **oversized inner**.
-* New endpoint **`POST /v1/wrap`** for deterministic testing (no LLM involved).
-* Optional tool registration `wrap_prompt_from_links` so the LLM can compose prompts as a tool step.
-
-**Dependency**
-
-```
-# backend/requirements/dev.txt
-requests==2.32.3
-```
-
-**Endpoint (summary)**
-
-```http
-POST /v1/wrap
-{
-  "outer_link": "http://localhost:9000/outer.txt",
-  "inner_link": "http://localhost:9000/inner.txt",
-  "placeholder": "{{CONTENT}}"  // optional
-}
-→ { "wrapped": "final composed prompt..." }
-```
-
-**End-to-end test recipe**
-
-```bash
-# 1) prepare test files
-mkdir -p ~/prompts && cd ~/prompts
-cat > outer.txt <<'TXT'
-You are a careful assistant.
-Use the following task:
-
-{{CONTENT}}
-
-Return a concise result.
-TXT
-echo "Summarize https://example.com in 3 bullets." > inner.txt
-
-# 2) serve locally
-python3 -m http.server 9000
-
-# 3) call wrapper API
-curl -s -X POST http://localhost:8000/v1/wrap \
-  -H "Content-Type: application/json" \
-  -d '{
-    "outer_link":"http://localhost:9000/outer.txt",
-    "inner_link":"http://localhost:9000/inner.txt"
-  }' | jq -r .wrapped
-# EXPECTS:
-# You are a careful assistant.
-# Use the following task:
-#
-# Summarize https://example.com in 3 bullets.
-#
-# Return a concise result.
-
-# Failure examples (for validation)
-# - wrong URL: http://localhost:9000/missing.txt
-# - outer.txt without {{CONTENT}}
-```
-
-**(Optional) Tool route via chat**
-If you registered `wrap_prompt_from_links`, you can nudge LLM to call it:
-
-```bash
-curl -s -X POST http://localhost:8000/v1/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message":"Compose a prompt by injecting inner into outer at {{CONTENT}} using these links:\nouter=http://localhost:9000/outer.txt\ninner=http://localhost:9000/inner.txt"
-  }' | jq
-# Check "used_tools": ["wrap_prompt_from_links"] if the tool was triggered.
-```
 
 
 ---
