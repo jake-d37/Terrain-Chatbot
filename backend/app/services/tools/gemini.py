@@ -1,5 +1,8 @@
 # backend/app/services/tools/gemini.py
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Deque
+from collections import deque
+import threading
+import time
 import os, json, logging
 
 import google.generativeai as genai
@@ -37,6 +40,45 @@ TOOL_RESULT:
 {tool_text}
 """
 
+
+RATE_LIMITED_MESSAGE = "Sorry, I’m handling too many requests right now. Please try again soon."
+
+
+class _RateLimiter:
+    """Simple sliding-window limiter to throttle outbound Gemini calls."""
+
+    def __init__(self, max_calls: int, window_seconds: float, mode: str):
+        self.max_calls = max_calls
+        self.window = window_seconds
+        self.mode = mode
+        self._history: Deque[float] = deque()
+        self._lock = threading.Lock()
+
+    def acquire(self):
+        if not self.max_calls or self.max_calls < 0:
+            return
+        while True:
+            now = time.monotonic()
+            with self._lock:
+                while self._history and now - self._history[0] >= self.window:
+                    self._history.popleft()
+                if len(self._history) < self.max_calls:
+                    self._history.append(now)
+                    return
+                wait_for = self.window - (now - self._history[0])
+            if self.mode == "error":
+                raise RuntimeError("Gemini API rate limit exceeded; try again later.")
+            # Default behaviour: block until a slot frees up.
+            time.sleep(max(wait_for, 0.0))
+
+
+_CALLS_PER_MINUTE = int(os.environ.get("GEMINI_CALLS_PER_MINUTE", "0") or 0)
+_RATE_LIMIT_MODE = os.environ.get("GEMINI_RATE_LIMIT_MODE", "block").lower()
+_GEMINI_LIMITER = _RateLimiter(
+    _CALLS_PER_MINUTE, 60.0, "error" if _RATE_LIMIT_MODE == "error" else "block"
+)
+
+
 class LLMClient:
     def __init__(self, model_name: str = "gemini-1.5-pro", api_key: str | None = None):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
@@ -52,6 +94,12 @@ class LLMClient:
 
     def _call(self, prompt: str) -> str:
         """Low-level real call that returns raw text."""
+        if not self._use_fake:
+            try:
+                _GEMINI_LIMITER.acquire()
+            except RuntimeError as e:
+                logging.warning("[LLM] %s", e)
+                raise
         resp = self._model.generate_content(prompt)
         try:
             return resp.candidates[0].content.parts[0].text
@@ -89,7 +137,11 @@ class LLMClient:
         sys_prompt = SYSTEM_TOOL_PROTOCOL.replace("{TOOL_DOCS}", "\n".join(tool_docs))
 
         user_text = next((m["content"] for m in messages if m["role"] == "user"), "")
-        decide_text = self._call(sys_prompt + "\n\nUser:\n" + user_text).strip()
+        try:
+            decide_text = self._call(sys_prompt + "\n\nUser:\n" + user_text).strip()
+        except RuntimeError:
+            logging.warning("[LLM] rate limiter denied tool decision call")
+            return RATE_LIMITED_MESSAGE, used
 
         # Try to parse JSON
         tool_req = None
@@ -98,12 +150,23 @@ class LLMClient:
         except json.JSONDecodeError:
             # Model didn't follow protocol; fall back to direct answer
             logging.info("[LLM] decision was not JSON -> treating as direct answer")
-            answer = decide_text if decide_text else self._call(user_text)
+            if decide_text:
+                answer = decide_text
+            else:
+                try:
+                    answer = self._call(user_text)
+                except RuntimeError:
+                    logging.warning("[LLM] rate limiter denied direct answer")
+                    return RATE_LIMITED_MESSAGE, used
             return answer, used
 
         if not tool_req or tool_req.get("tool") in (None, "", "none"):
             # No tool, generate final answer directly
-            answer = self._call(user_text)
+            try:
+                answer = self._call(user_text)
+            except RuntimeError:
+                logging.warning("[LLM] rate limiter denied direct answer")
+                return RATE_LIMITED_MESSAGE, used
             return answer, used
 
         # 2) Run the tool
@@ -115,5 +178,9 @@ class LLMClient:
 
         # 3) Ask model to summarize tool result for user
         summary_prompt = FOLLOWUP_SUMMARIZER.format(tool_text=nl)
-        final = self._call(summary_prompt)
+        try:
+            final = self._call(summary_prompt)
+        except RuntimeError:
+            logging.warning("[LLM] rate limiter denied follow-up summarizer")
+            return RATE_LIMITED_MESSAGE, used
         return final, used

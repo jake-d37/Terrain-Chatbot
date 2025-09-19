@@ -364,3 +364,47 @@ curl -s -X POST http://localhost:8000/v1/chat \
 - Broaden/narrow relevance by editing keywords in `relevance.py` or changing `min_hits`.
 - Add more prewritten replies in `prewritten_response` for FAQs.
 - English-only behavior is injected via `should_force_english`; remove that line to follow user language.
+
+---
+
+## 11) Feature: Gemini rate limiting (anti-DDoS)
+
+**What we added (2025-09-15)**
+
+- `app/services/tools/gemini.py` now wraps outbound Gemini calls with a sliding-window
+  limiter. The guard rails are process-wide, so every instance in the worker shares
+  the same counters.
+
+**Configuration knobs**
+
+- `GEMINI_CALLS_PER_MINUTE` — integer; when >0, caps successful/attempted calls per
+  60-second window. Defaults to `0` (unlimited).
+- `GEMINI_RATE_LIMIT_MODE` — `block` (default) sleeps until a slot frees up;
+  `error` raises immediately with a warning. Use `error` when you prefer fast
+  failure for upstream retry logic.
+
+**Behaviour**
+
+- Rate limiting is skipped in FAKE mode (no API key).
+- The limiter sits inside `LLMClient._call`, so both the tool-decision and
+  follow-up summariser calls are throttled.
+- When the limit is hit in `error` mode, the client surfaces
+  `RuntimeError("Gemini API rate limit exceeded; try again later.")` which the
+  caller can catch and translate into user messaging.
+
+**Quick test**
+
+```bash
+export GEMINI_CALLS_PER_MINUTE=2
+export GEMINI_RATE_LIMIT_MODE=error
+
+for i in {1..3}; do
+  curl -s -X POST http://localhost:8000/v1/chat \
+    -H "Content-Type: application/json" \
+    -d '{"message":"Trigger a real Gemini call"}' | jq .error
+done
+# Expect the third request to fail fast with the rate-limit RuntimeError.
+```
+
+In `block` mode, use `time curl ...` to observe the third request pausing until
+the one-minute window resets.
