@@ -1,0 +1,62 @@
+# Terrain-Chatbot Frontend Development
+
+## Running the Frontend
+
+To start the frontend for development:
+
+1. Open a terminal and navigate to the frontend folder:
+
+```bash
+cd frontend
+```
+
+2. Install dependencies (only needed the first time):
+```bash
+npm install
+```
+
+3. Start the development server:
+
+```bash
+npm run dev
+```
+
+The frontend should now be running, typically on http://localhost:3000/ (React Scripts default).
+
+Changes to the code will automatically reload the page.
+
+### Notes
+
+Make sure you have Node.js and npm installed.
+
+The first run may take a few moments as the dev server compiles the project for the first time. Subsequent runs are faster.
+
+Do not `run npm create vite` or any other project generator as the frontend is already set up.
+
+## Project Structure
+
+frontend/
+  src/
+    app/                 # App initialization and routing; has styles/ for global/app-level styles
+    components/          # Reusable UI components; each may have a styles/ folder for component-specific styles
+    features/            # Domain-specific features (auth, user, dashboard, etc.)
+    hooks/               # Custom React hooks
+    pages/               # Pages (Next.js / Vite routing entry points)
+    services/            # API client and service functions
+    store/               # State management (e.g., Redux, Zustand)
+    utils/               # Utility functions/helpers
+  public/                # Public static files (images, favicon, etc.)
+  tests/                 # Unit, integration, and acceptance tests
+  package.json           # Node dependencies & npm scripts
+  package-lock.json      # Exact dependency versions
+
+### Notes
+- The `app/` and `components/` folders include their own `styles/` subfolders for global and component-level styles.  
+- The `public/` folder contains static assets served as-is.  
+- Run `npm run dev` inside the `frontend/` folder to start the development server.
+
+## Tests
+
+Include frontend unit tests and acceptance tests in the `tests/` folder
+
+This will be updated. 

@@ -1,5 +1,4 @@
 # Everything the developer needs in addition to the production requirements
--r prod.txt
 
 # Testing
 factory-boy==3.3.3
@@ -25,3 +24,10 @@ structlog==25.4.0
 python-dotenv==1.0.1
 google-generativeai==0.8.3
 requests==2.32.3
+
+# HTTP client
+requests
+# Environment variable
+python-dotenv
+# HTML parser
+beautifulsoup4
