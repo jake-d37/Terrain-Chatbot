@@ -9,6 +9,9 @@ load_dotenv()
 # Connect shopify API
 SHOP_NAME = os.getenv("SHOPIFY_SHOP_NAME")
 ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
+if not SHOP_NAME or not ACCESS_TOKEN:
+    raise ValueError("SHOPIFY_SHOP_NAME and SHOPIFY_ACCESS_TOKEN must be set in .env")
+
 
 API_VERSION = "2025-01"
 BASE_URL = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}"
